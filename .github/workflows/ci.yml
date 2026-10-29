@@ -1,27 +1,103 @@
-name: CI
+name: CI Pipeline with Local Report Forwarding
 
 on:
   push:
-    branches: ["**"]
+    branches: [ "*" ]
+  pull_request:
+    branches: [ "*" ]
 
 jobs:
-  test:
+  test-and-report:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check out code
+      - name: Check out repository
         uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v4
         with:
-          python-version: "3.12"
-          cache: pip
+          python-version: "3.10"
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install pytest pytest-json-report requests
 
-      - name: Run tests
-        run: pytest test_app.py
+      - name: Run Pytest
+        id: run_tests
+        continue-on-error: true
+        run: |
+          pytest --json-report --json-report-file=report.json test_app.py
+
+      - name: Format and Send Test Report to Receiver
+        if: always()
+        env:
+          RECEIVER_URL: ${{ secrets.REPORT_RECEIVER_URL }}
+        run: |
+          python -c "
+          import json, os, urllib.request, time
+
+          # Load generated pytest json report or create fallback if missing
+          if os.path.exists('report.json'):
+              with open('report.json') as f:
+                  data = json.load(f)
+              summary = data.get('summary', {})
+              total = summary.get('total', 0)
+              passed = summary.get('passed', 0)
+              failed = summary.get('failed', 0)
+              
+              tests = []
+              for t in data.get('tests', []):
+                  node_id = t.get('nodeid', 'unknown')
+                  outcome = t.get('outcome', 'unknown')
+                  msg = ''
+                  if outcome == 'failed':
+                      call_stage = t.get('call', {})
+                      msg = call_stage.get('longrepr', 'Test failed')
+                  tests.append({
+                      'name': node_id,
+                      'result': outcome,
+                      'failure_message': msg
+                  })
+          else:
+              total, passed, failed = 0, 0, 0
+              tests = []
+
+          overall_status = 'passed' if failed == 0 and total > 0 else 'failed'
+
+          payload = {
+              'repository': '${{ github.repository }}',
+              'branch': '${{ github.ref_name }}',
+              'commit_sha': '${{ github.sha }}',
+              'run_id': '${{ github.run_id }}',
+              'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+              'status': overall_status,
+              'summary': {
+                  'total': total,
+                  'passed': passed,
+                  'failed': failed
+              },
+              'tests': tests
+          }
+
+          receiver_url = os.environ.get('RECEIVER_URL')
+          if receiver_url:
+              req = urllib.request.Request(
+                  receiver_url,
+                  data=json.dumps(payload).encode('utf-8'),
+                  headers={'Content-Type': 'application/json'}
+              )
+              try:
+                  with urllib.request.urlopen(req) as resp:
+                      print(f'[+] Report sent successfully: {resp.status}')
+              except Exception as e:
+                  print(f'[-] Failed to send report: {e}')
+          else:
+              print('[-] RECEIVER_URL secret is not defined.')
+          "
+
+      - name: Fail workflow if tests failed
+        if: steps.run_tests.outcome != 'success'
+        run: exit 1
