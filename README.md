@@ -31,7 +31,10 @@ see every saved submission in one place. Built with Python, Flask, SQLite, and B
 ```
 assignment-portal/
 ├── app.py              # Flask app: database setup, validation, routes
-├── requirements.txt    # Python dependencies
+├── requirements.txt    # Python dependencies (Flask, pytest)
+├── test_app.py         # Automated tests (pytest)
+├── .github/workflows/
+│   └── ci.yml          # GitHub Actions pipeline
 ├── templates/
 │   └── index.html      # Single page: header, form, submissions table
 ├── README.md
@@ -150,15 +153,35 @@ $env:SECRET_KEY = "replace-with-a-long-random-string"
 
 ## Executing Automated Tests
 
-> **PLACEHOLDER: to be completed in a later step.**
->
-> This section will explain how to install any test dependencies, run the automated
-> test suite, and read the results.
->
-> - [ ] Test dependencies
-> - [ ] Command to run the tests
-> - [ ] What the tests cover
-> - [ ] How to interpret the output
+The tests live in `test_app.py` and use [pytest](https://docs.pytest.org/). They run against a
+private in-memory SQLite database, so your real `submissions.db` is never changed.
+
+1. Activate your virtual environment and install dependencies (this includes pytest):
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. Run the tests from the project folder:
+
+   ```bash
+   pytest test_app.py
+   ```
+
+   Add `-v` for one line per test. A passing run ends with `3 passed`.
+
+### What the tests cover
+
+| Test | Checks |
+|---|---|
+| `test_valid_submission_is_saved` | A complete form with a valid URL redirects, is stored in the database, and appears on the page as a clickable link with a success message |
+| `test_missing_registration_number_is_rejected` | A blank registration number returns a validation message (HTTP 400) and nothing is saved |
+| `test_invalid_url_is_rejected` | A URL such as `not-a-url` returns a validation message (HTTP 400) and nothing is saved |
+
+### Continuous integration
+
+`.github/workflows/ci.yml` runs `pytest test_app.py` on GitHub Actions for every push to any
+branch. Results appear in the repository's **Actions** tab.
 
 ## Starting the Local Report Receiver
 

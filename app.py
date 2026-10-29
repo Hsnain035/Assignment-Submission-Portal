@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 from flask import Flask, flash, g, redirect, render_template, request, url_for
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-DATABASE = os.path.join(BASE_DIR, "submissions.db")
+DEFAULT_DATABASE = os.path.join(BASE_DIR, "submissions.db")
 
 # Field limits keep the database tidy and match the HTML maxlength attributes.
 LIMITS = {"name": 100, "reg_number": 30, "title": 150, "url": 500}
@@ -19,6 +19,9 @@ LIMITS = {"name": 100, "reg_number": 30, "title": 150, "url": 500}
 app = Flask(__name__)
 # Needed for flash messages. Set SECRET_KEY in the environment for production.
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-only-change-me")
+# Path (or SQLite URI, e.g. "file:name?mode=memory&cache=shared") of the database.
+# Tests override this so they never touch the real submissions.db.
+app.config["DATABASE"] = DEFAULT_DATABASE
 
 
 # --------------------------------------------------------------------------
@@ -27,7 +30,7 @@ app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-only-change-me")
 def get_db():
     """Return a per-request SQLite connection."""
     if "db" not in g:
-        g.db = sqlite3.connect(DATABASE)
+        g.db = sqlite3.connect(app.config["DATABASE"], uri=True)
         g.db.row_factory = sqlite3.Row
     return g.db
 
@@ -41,7 +44,7 @@ def close_db(_exc=None):
 
 def init_db():
     """Create the submissions table if it does not already exist."""
-    with sqlite3.connect(DATABASE) as conn:
+    with sqlite3.connect(app.config["DATABASE"], uri=True) as conn:
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS submissions (
