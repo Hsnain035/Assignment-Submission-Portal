@@ -3,3 +3,8 @@ __pycache__/
 venv/
 .venv/
 submissions.db
+test-report.json
+report.xml
+.pytest_cache/
+report-history/
+report.json

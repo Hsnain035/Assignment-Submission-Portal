@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Assignment Submission Portal - Demo</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <style>
+    :root { --portal-ink: #1b2a41; --portal-accent: #2f5d9e; }
+    body { background-color: #f4f6fa; }
+    .portal-header { background: var(--portal-ink); color: #fff; padding: 2.5rem 0 4.5rem; }
+    .portal-header p { color: #b7c3d6; max-width: 40rem; }
+    .portal-main { margin-top: -3rem; }
+    .btn-portal { background-color: var(--portal-accent); border-color: var(--portal-accent); color: #fff; }
+    .btn-portal:hover, .btn-portal:focus { background-color: #264d84; border-color: #264d84; color: #fff; }
+    .card { border: 0; box-shadow: 0 2px 10px rgba(27, 42, 65, .08); }
+    .table thead th { white-space: nowrap; font-weight: 600; color: #475569; }
+    .url-cell { max-width: 22rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  </style>
+</head>
+<body>
+
+  <header class="portal-header">
+    <div class="container">
+      <h1 class="h2 fw-bold mb-2"><i class="bi bi-journal-check me-2"></i>Assignment Submission Portal</h1>
+      <p class="mb-0">Submit the link to your completed assignment and check the list below to confirm it was recorded.</p>
+    </div>
+  </header>
+
+  <main class="container portal-main pb-5">
+
+    <div class="alert alert-info shadow-sm" role="note">
+      <i class="bi bi-info-circle-fill me-2"></i>
+      <strong>Static demo.</strong> This page runs entirely in your browser using the same validation rules as the
+      Flask application. Submissions are stored in this browser only (localStorage), not on a server.
+    </div>
+
+    <div id="alerts" class="mb-3" aria-live="polite"></div>
+
+    <div class="row g-4">
+      <div class="col-lg-4">
+        <div class="card">
+          <div class="card-body p-4">
+            <h2 class="h5 mb-3">New submission</h2>
+            <form id="submission-form" novalidate>
+              <div class="mb-3">
+                <label for="name" class="form-label">Student name</label>
+                <input type="text" class="form-control" id="name" maxlength="100" autocomplete="name" required>
+              </div>
+              <div class="mb-3">
+                <label for="reg_number" class="form-label">Registration number</label>
+                <input type="text" class="form-control" id="reg_number" maxlength="30" required>
+              </div>
+              <div class="mb-3">
+                <label for="title" class="form-label">Assignment title</label>
+                <input type="text" class="form-control" id="title" maxlength="150" required>
+              </div>
+              <div class="mb-4">
+                <label for="url" class="form-label">Submission URL</label>
+                <input type="text" class="form-control" id="url" maxlength="500" placeholder="https://" required>
+                <div class="form-text">Link to your file, repository, or shared folder.</div>
+              </div>
+              <button type="submit" class="btn btn-portal w-100"><i class="bi bi-send me-1"></i>Submit assignment</button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-8">
+        <div class="card">
+          <div class="card-body p-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h2 class="h5 mb-0">Submissions</h2>
+              <span class="badge text-bg-secondary" id="count">0 total</span>
+            </div>
+            <div id="table-wrap"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    (function () {
+      "use strict";
+
+      var STORAGE_KEY = "assignment-portal-demo";
+      var LIMITS = { name: 100, reg_number: 30, title: 150, url: 500 };
+      var LABELS = {
+        name: "Student name",
+        reg_number: "Registration number",
+        title: "Assignment title",
+        url: "Submission URL"
+      };
+
+      // In-memory fallback if localStorage is unavailable.
+      var memory = [];
+
+      function load() {
+        try {
+          var raw = window.localStorage.getItem(STORAGE_KEY);
+          return raw ? JSON.parse(raw) : [];
+        } catch (e) {
+          return memory;
+        }
+      }
+
+      function save(list) {
+        memory = list;
+        try {
+          window.localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+        } catch (e) { /* keep in-memory copy */ }
+      }
+
+      // Same rules as app.py: http/https only, must have a host, no whitespace.
+      function isValidUrl(value) {
+        if (/\s/.test(value)) return false;
+        try {
+          var parsed = new URL(value);
+          return (parsed.protocol === "http:" || parsed.protocol === "https:") && parsed.hostname !== "";
+        } catch (e) {
+          return false;
+        }
+      }
+
+      function validate(data) {
+        var errors = [];
+        Object.keys(LABELS).forEach(function (key) {
+          if (!data[key]) {
+            errors.push(LABELS[key] + " is required.");
+          } else if (data[key].length > LIMITS[key]) {
+            errors.push(LABELS[key] + " must be " + LIMITS[key] + " characters or fewer.");
+          }
+        });
+        if (data.url && data.url.length <= LIMITS.url && !isValidUrl(data.url)) {
+          errors.push("Submission URL must be a valid link starting with http:// or https://.");
+        }
+        return errors;
+      }
+
+      function showAlerts(messages, category) {
+        var box = document.getElementById("alerts");
+        box.textContent = "";
+        messages.forEach(function (message) {
+          var div = document.createElement("div");
+          div.className = "alert alert-" + category + " shadow-sm";
+          div.setAttribute("role", "alert");
+          div.textContent = message;
+          box.appendChild(div);
+        });
+      }
+
+      function cell(text) {
+        var td = document.createElement("td");
+        td.textContent = text;
+        return td;
+      }
+
+      function render() {
+        var list = load();
+        document.getElementById("count").textContent = list.length + " total";
+        var wrap = document.getElementById("table-wrap");
+        wrap.textContent = "";
+
+        if (!list.length) {
+          var empty = document.createElement("div");
+          empty.className = "text-center text-muted py-5";
+          empty.textContent = "No submissions yet. Use the form to add the first one.";
+          wrap.appendChild(empty);
+          return;
+        }
+
+        var responsive = document.createElement("div");
+        responsive.className = "table-responsive";
+        var table = document.createElement("table");
+        table.className = "table table-hover align-middle mb-0";
+
+        var head = document.createElement("thead");
+        var headRow = document.createElement("tr");
+        ["Student", "Reg. no.", "Assignment", "Link", "Submitted"].forEach(function (label) {
+          var th = document.createElement("th");
+          th.scope = "col";
+          th.textContent = label;
+          headRow.appendChild(th);
+        });
+        head.appendChild(headRow);
+        table.appendChild(head);
+
+        var body = document.createElement("tbody");
+        list.slice().reverse().forEach(function (item) {
+          var tr = document.createElement("tr");
+          tr.appendChild(cell(item.name));
+          tr.appendChild(cell(item.reg_number));
+          tr.appendChild(cell(item.title));
+
+          var linkCell = document.createElement("td");
+          linkCell.className = "url-cell";
+          var a = document.createElement("a");
+          a.href = item.url;
+          a.target = "_blank";
+          a.rel = "noopener noreferrer";
+          a.title = item.url;
+          a.textContent = item.url;
+          linkCell.appendChild(a);
+          tr.appendChild(linkCell);
+
+          var time = cell(item.created_at);
+          time.className = "text-nowrap text-muted small";
+          tr.appendChild(time);
+          body.appendChild(tr);
+        });
+        table.appendChild(body);
+        responsive.appendChild(table);
+        wrap.appendChild(responsive);
+      }
+
+      document.getElementById("submission-form").addEventListener("submit", function (event) {
+        event.preventDefault();
+        var data = {};
+        Object.keys(LABELS).forEach(function (key) {
+          data[key] = document.getElementById(key).value.trim();
+        });
+
+        var errors = validate(data);
+        if (errors.length) {
+          showAlerts(errors, "danger");
+          return;
+        }
+
+        data.created_at = new Date().toLocaleString();
+        var list = load();
+        list.push(data);
+        save(list);
+        event.target.reset();
+        showAlerts(["Assignment submitted successfully."], "success");
+        render();
+      });
+
+      render();
+    })();
+  </script>
+</body>
+</html>
