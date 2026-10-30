@@ -68,8 +68,7 @@ def is_valid_url(value):
         return False
     try:
         parsed = urlparse(value)
-        # DEFECT INTRODUCED HERE: Bypassing URL scheme/hostname checks
-        return True
+        return parsed.scheme in ("http", "https") and bool(parsed.hostname)
     except ValueError:
         return False
 
